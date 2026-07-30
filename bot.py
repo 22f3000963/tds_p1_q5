@@ -46,7 +46,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         response = client.chat.completions.create(
-            model="gemini-1.5-pro-latest",
+            model="gemini-1.5-flash",
             messages=[{"role": "system", "content": system_prompt}] + history[-6:],
         )
         reply_text = response.choices[0].message.content.strip()
