@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filte
 
 # --- Environment Variables ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+AIPIPE_TOKEN = os.environ.get("AIPIPE_TOKEN")
 LOG_URL = os.environ.get("LOG_URL") 
 
 LOG_FILE = "run.jsonl"
@@ -40,23 +40,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        full_prompt = system_prompt + "\n\n"
-        for msg in history[-6:]:
-            full_prompt += f"{msg['role']}: {msg['content']}\n"
-            
+        url = "https://aipipe.org/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {AIPIPE_TOKEN}",
+            "Content-Type": "application/json"
+        }
         payload = {
-            "contents": [{"parts": [{"text": full_prompt}]}],
-            "generationConfig": {"temperature": 0.0}
+            "model": "gpt-5-mini",
+            "messages": [{"role": "system", "content": system_prompt}] + history[-6:],
+            "temperature": 0.0
         }
         
         import requests
-        res = requests.post(url, json=payload).json()
+        res = requests.post(url, headers=headers, json=payload).json()
         
-        if "candidates" in res:
-            reply_text = res["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if "choices" in res:
+            reply_text = res["choices"][0]["message"]["content"].strip()
         else:
-            reply_text = json.dumps({"answer": f"Gemini API Error: {json.dumps(res)}"})
+            reply_text = json.dumps({"answer": f"AIPipe API Error: {json.dumps(res)}"})
     except Exception as e:
         reply_text = json.dumps({"answer": f"API Error: {str(e)}"})
         
