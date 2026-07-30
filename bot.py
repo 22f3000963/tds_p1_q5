@@ -10,10 +10,6 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 LOG_URL = os.environ.get("LOG_URL") 
 
-client = OpenAI(
-    api_key=GEMINI_API_KEY,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-)
 LOG_FILE = "run.jsonl"
 
 # Keeps the last few messages per chat, so multi-turn questions work —
@@ -45,11 +41,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        response = client.chat.completions.create(
-            model="gemini-1.5-flash",
-            messages=[{"role": "system", "content": system_prompt}] + history[-6:],
-        )
-        reply_text = response.choices[0].message.content.strip()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        full_prompt = system_prompt + "\n\n"
+        for msg in history[-6:]:
+            full_prompt += f"{msg['role']}: {msg['content']}\n"
+            
+        payload = {
+            "contents": [{"parts": [{"text": full_prompt}]}],
+            "generationConfig": {"temperature": 0.0}
+        }
+        
+        import requests
+        res = requests.post(url, json=payload).json()
+        
+        if "candidates" in res:
+            reply_text = res["candidates"][0]["content"]["parts"][0]["text"].strip()
+        else:
+            reply_text = json.dumps({"answer": f"Gemini API Error: {json.dumps(res)}"})
     except Exception as e:
         reply_text = json.dumps({"answer": f"API Error: {str(e)}"})
         
