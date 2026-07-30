@@ -1,7 +1,6 @@
 import json
 import time
 import os
-from openai import OpenAI
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
