@@ -5,12 +5,19 @@ from openai import OpenAI
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
+# --- Environment Variables ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-AIPIPE_TOKEN = os.environ.get("AIPIPE_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 LOG_URL = os.environ.get("LOG_URL") 
 
-client = OpenAI(base_url="https://aipipe.org/openai/v1", api_key=AIPIPE_TOKEN)
+client = OpenAI(
+    api_key=GEMINI_API_KEY,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
 LOG_FILE = "run.jsonl"
+
+# Keeps the last few messages per chat, so multi-turn questions work —
+# "answer the LAST message" still needs the earlier ones for context.
 conversation_history = {}
 
 def log_event(event: dict):
@@ -26,6 +33,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = conversation_history.setdefault(chat_id, [])
     history.append({"role": "user", "content": user_text})
 
+    # Ask the AI to work out the answer. The system prompt tells it exactly how to
+    # format the final reply — this is the part that MUST match what the question asked.
     system_prompt = (
         "You are a careful data analyst. The user's LAST message asks a data-analysis "
         "question and tells you exactly what JSON shape to reply with. Work out the "
@@ -37,7 +46,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gemini-1.5-pro",
             messages=[{"role": "system", "content": system_prompt}] + history[-6:],
         )
         reply_text = response.choices[0].message.content.strip()
@@ -46,9 +55,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     history.append({"role": "assistant", "content": reply_text})
 
+    # Make sure we actually reply with valid JSON containing "log_url"
     try:
         parsed = json.loads(reply_text)
     except json.JSONDecodeError:
+        # Model added extra text — try to pull out just the {...} part.
         start, end = reply_text.find("{"), reply_text.rfind("}")
         if start != -1 and end != -1:
             parsed = json.loads(reply_text[start:end + 1])
@@ -62,6 +73,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(final_reply)
 
 if __name__ == "__main__":
+    if TELEGRAM_BOT_TOKEN == "PASTE_YOUR_BOTFATHER_TOKEN_HERE" or not TELEGRAM_BOT_TOKEN:
+        print("WARNING: TELEGRAM_BOT_TOKEN not set!")
+    
+    # --- RENDER WEB SERVICE HACK ---
+    # Render requires a web port to be open for Free Web Services.
+    import threading
+    import http.server
+    import socketserver
+    
+    def start_dummy_server():
+        port = int(os.environ.get("PORT", 10000))
+        Handler = http.server.SimpleHTTPRequestHandler
+        try:
+            with socketserver.TCPServer(("", port), Handler) as httpd:
+                httpd.serve_forever()
+        except:
+            pass
+            
+    threading.Thread(target=start_dummy_server, daemon=True).start()
+    # -------------------------------
+    
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Bot is running... (Ctrl+C to stop)")
