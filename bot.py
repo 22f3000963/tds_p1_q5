@@ -47,8 +47,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         payload = {
             "model": "gpt-5-mini",
-            "messages": [{"role": "system", "content": system_prompt}] + history[-6:],
-            "temperature": 0.0
+            "messages": [{"role": "system", "content": system_prompt}] + history[-6:]
         }
         
         import requests
